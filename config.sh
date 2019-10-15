@@ -2,9 +2,16 @@
 
 
 # httpd conf file paths
-orgF="/etc/httpd/conf.d/userdir.conf-2"
+orgF="/etc/httpd/conf.d/userdir.conf-old"
 newF="/etc/httpd/conf.d/userdir.conf"
 
+# nfs
+orgN="/etc/exports-old"
+newN="/etc/exports"
+
+# samba
+orgS="/etc/samba/smb.conf-old"
+newS="/etc/samba/smb.conf" 
 
 # Adding a new user and password
 if [ $(id -u) -eq 0 ]; then
@@ -29,9 +36,25 @@ echo "Configuring Apache"
 mkdir /home/$username/public_html
 
 # Copying old conf files just in case
-cp /etc/httpd/conf.d/userdir.conf /etc/httpd/conf.d/userdir.conf-old-2
-cp /etc/httpd/conf.d/userdir.conf /etc/httpd/conf.d/userdir.conf-old
-
+# httpd files
+if [ -f $orgF ]
+then
+    sudo cp $orgF $newF
+else
+    sudo cp $newF $orgF
+fi
+if [ -f $orgN ]
+then
+    sudo cp $orgN $newN
+else
+    sudo cp $newN $orgN
+fi
+if [ -f $orgS ]
+then
+    sudo cp $orgS $newS
+else
+    sudo cp $newS $orgS
+fi
 
 sudo sed -i -e 's/UserDir disabled/#UserDir disabled/' $newF
 sudo sed -i -e 's/#UserDir public_html/UserDir public_html/' $newF
@@ -80,10 +103,33 @@ sudo systemctl restart httpd.service
 echo "Configuring NFS"
 
 # test file for nfs
-echo "Creating test.txt. Write something:"
-sudo cat > /home/$username/test.txt
+#echo "Creating test.txt. Write something:"
+#sudo cat > /home/$username/test.txt
+
+sudo echo "hello" > /home/$username/test.txt
 
 # change access persmission for that file
 sudo chmod 777 /home/$username/test.txt
 
+sudo echo "/home/$username 192.168.0.0/24(rw,no_root_squash)" >> $newN
 
+sudo systemctl restart nfs-server.service
+
+echo "Configuring Samba"
+
+# adding new label for windows network drive mapping
+sudo echo "
+[NFSHARE]
+    path = /home/$username
+    public = yes
+    writable = yes
+    printable = no
+" >> $newS
+
+# generate smbpasswd for a $username
+#sudo smbpasswd -a $username
+echo "smbpasswd"
+(echo $password; echo $password) | smbpasswd -a $username -s
+    [ $? -eq 0 ] && echo "User has been added to smb!" || echo "Failed to add a user to smb!"
+
+sudo systemctl restart smb.service
